@@ -1,0 +1,25 @@
+{
+  "name": "pdf-reader-frontend",
+  "version": "1.0.0",
+  "description": "PDF Reader with Text-to-Speech",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "webpack serve --mode development --host 0.0.0.0 --port 3000",
+    "build": "webpack --mode production",
+    "start": "npm run dev"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "css-loader": "^6.8.1",
+    "html-webpack-plugin": "^5.5.3",
+    "style-loader": "^3.3.3",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.2.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}

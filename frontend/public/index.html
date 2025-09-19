@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Reader with Text-to-Speech</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>PDF Reader with Text-to-Speech</h1>
+      </header>
+
+      <div class="upload-section">
+        <input type="file" id="pdfInput" accept=".pdf" />
+        <button id="uploadBtn">Upload PDF</button>
+      </div>
+
+      <div class="controls">
+        <button id="playBtn" disabled>Play</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+
+      <div class="pdf-content">
+        <div id="pdfPages"></div>
+      </div>
+
+      <div class="status">
+        <p id="statusText">Upload a PDF to get started</p>
+      </div>
+    </div>
+  </body>
+</html>

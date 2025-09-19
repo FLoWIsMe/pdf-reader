@@ -34,8 +34,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Process PDF
-        result = pdf_processor.extract_text_from_pdf(file_path)
+        # Process PDF with image extraction and header/footer detection
+        result = pdf_processor.extract_text_and_images_from_pdf(file_path)
 
         if result["success"]:
             return JSONResponse(

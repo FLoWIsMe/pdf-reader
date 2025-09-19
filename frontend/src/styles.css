@@ -42,7 +42,7 @@ header {
 }
 
 .upload-section button,
-.controls button {
+.playback-controls button {
   background-color: #3498db;
   color: white;
   padding: 0.8rem 1.5rem;
@@ -51,24 +51,111 @@ header {
   cursor: pointer;
   margin-right: 0.5rem;
   font-size: 1rem;
+  transition: background-color 0.2s;
 }
 
 .upload-section button:hover,
-.controls button:hover {
+.playback-controls button:hover:not(:disabled) {
   background-color: #2980b9;
 }
 
-.controls button:disabled {
+.playback-controls button:disabled {
   background-color: #bdc3c7;
   cursor: not-allowed;
 }
 
 .controls {
   background-color: white;
-  padding: 1rem;
+  padding: 1.5rem;
   border-radius: 8px;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.playback-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.speed-control label {
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.speed-control input[type="range"] {
+  width: 200px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #3498db 0%, #e74c3c 100%);
+  outline: none;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.speed-control input[type="range"]:hover {
+  opacity: 1;
+}
+
+.speed-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2c3e50;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.speed-control input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2c3e50;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.speed-control input[type="range"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#speedValue {
+  font-weight: bold;
+  color: #2c3e50;
+  min-width: 50px;
+  font-size: 1.1rem;
+}
+
+.keyboard-shortcuts {
+  background-color: #ecf0f1;
+  padding: 0.8rem;
+  border-radius: 6px;
+  margin-bottom: 2rem;
+  text-align: center;
+  border-left: 4px solid #3498db;
+}
+
+.keyboard-shortcuts kbd {
+  background-color: #34495e;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .pdf-content {
@@ -82,25 +169,71 @@ header {
 
 .page {
   margin-bottom: 2rem;
-  padding: 1rem;
+  padding: 1.5rem;
   border: 1px solid #e0e0e0;
   border-radius: 4px;
+  background-color: #fafafa;
 }
 
 .page h3 {
   margin-bottom: 1rem;
   color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 0.5rem;
 }
 
 .page-text {
-  line-height: 1.8;
-  font-size: 1rem;
+  line-height: 2;
+  font-size: 1.1rem;
+  color: #2c3e50;
 }
 
-.current-word {
-  background-color: #f39c12;
+.word {
+  display: inline;
+  transition: all 0.3s ease;
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 1px;
+}
+
+.word:hover {
+  background-color: #e8f4fd;
+  transform: scale(1.02);
+}
+
+.word.current-word {
+  background-color: #f39c12;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 3px 6px rgba(243, 156, 18, 0.4);
+  transform: scale(1.08);
+  animation: pulse 0.6s ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1.08);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+.word.spoken-word {
+  background-color: #d5eedd;
+  color: #27ae60;
+  border: 1px solid #a9dfbc;
+}
+
+.word.clicked-start {
+  background-color: #e8f5e8;
+  color: #2980b9;
+  font-weight: bold;
+  border: 2px solid #3498db;
 }
 
 .status {
@@ -114,4 +247,50 @@ header {
   text-align: center;
   font-style: italic;
   color: #7f8c8d;
+}
+
+/* Speed indicators */
+.speed-control::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  font-size: 0.8rem;
+  color: #7f8c8d;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .playback-controls {
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+
+  .speed-control {
+    justify-content: center;
+  }
+
+  .speed-control input[type="range"] {
+    width: 250px;
+  }
+}
+
+/* Focus styles for accessibility */
+.word:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+button:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+input[type="range"]:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
 }

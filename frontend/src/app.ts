@@ -33,18 +33,21 @@ class PDFReaderApp {
   private currentPageIndex = 0;
   private currentWordIndex = 0;
   private speechRate = 1.0;
-  private wordElements: HTMLElement[] = [];
+  private wordElements: Map<string, HTMLElement> = new Map();
   private keyboardListenerActive = false;
   private isImageView = true;
   private skipHeaderFooter = true;
+  private currentWordsData: WordData[][] = [];
 
   constructor() {
     this.speechSynthesis = window.speechSynthesis;
     this.initializeEventListeners();
     this.initializeKeyboardShortcuts();
+    console.log("PDFReaderApp initialized");
   }
 
   private initializeEventListeners(): void {
+    console.log("Initializing event listeners");
     const uploadBtn = document.getElementById("uploadBtn") as HTMLButtonElement;
     const playBtn = document.getElementById("playBtn") as HTMLButtonElement;
     const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
@@ -92,6 +95,12 @@ class PDFReaderApp {
   private toggleView(): void {
     if (!this.currentPDF) return;
 
+    console.log(
+      `Toggling view from ${this.isImageView ? "image" : "text"} to ${
+        this.isImageView ? "text" : "image"
+      }`
+    );
+
     this.isImageView = !this.isImageView;
     const toggleViewBtn = document.getElementById(
       "toggleViewBtn"
@@ -108,16 +117,42 @@ class PDFReaderApp {
 
   private handleSkipHeaderFooterChange(event: Event): void {
     const target = event.target as HTMLInputElement;
+    console.log(`Skip header/footer changed to: ${target.checked}`);
     this.skipHeaderFooter = target.checked;
 
     if (this.currentPDF) {
+      this.updateCurrentWordsData();
       this.renderPDF();
     }
+  }
+
+  private updateCurrentWordsData(): void {
+    if (!this.currentPDF) return;
+
+    console.log(
+      "Updating current words data, skipHeaderFooter:",
+      this.skipHeaderFooter
+    );
+
+    this.currentWordsData = this.currentPDF.pages.map((page, pageIndex) => {
+      const words = this.skipHeaderFooter
+        ? page.words
+        : this.extractWordsFromText(page.original_text);
+      console.log(`Page ${pageIndex}: ${words.length} words`);
+      return words;
+    });
+
+    console.log(
+      "Current words data updated:",
+      this.currentWordsData.length,
+      "pages"
+    );
   }
 
   private togglePlayPause(): void {
     if (!this.currentPDF || !this.keyboardListenerActive) return;
 
+    console.log("Toggle play/pause called");
     const playBtn = document.getElementById("playBtn") as HTMLButtonElement;
     const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
 
@@ -149,6 +184,7 @@ class PDFReaderApp {
     formData.append("file", file);
 
     try {
+      console.log("Starting PDF upload");
       this.updateStatus("Uploading and processing PDF...");
 
       const response = await axios.post(
@@ -161,7 +197,9 @@ class PDFReaderApp {
         }
       );
 
+      console.log("PDF upload successful, response:", response.data);
       this.currentPDF = response.data.data;
+      this.updateCurrentWordsData();
       this.renderPDF();
       this.enableControls();
       this.keyboardListenerActive = true;
@@ -192,11 +230,15 @@ class PDFReaderApp {
   private renderPDF(): void {
     if (!this.currentPDF) return;
 
+    console.log(`Rendering PDF in ${this.isImageView ? "image" : "text"} view`);
+
     const pdfPagesContainer = document.getElementById("pdfPages");
     if (!pdfPagesContainer) return;
 
     pdfPagesContainer.innerHTML = "";
-    this.wordElements = [];
+    this.wordElements.clear();
+
+    console.log("Cleared word elements, count:", this.wordElements.size);
 
     // Show header/footer info if patterns were detected
     if (
@@ -206,31 +248,35 @@ class PDFReaderApp {
       const infoDiv = document.createElement("div");
       infoDiv.className = "header-footer-info";
       infoDiv.innerHTML = `
-                <strong>Header/Footer Detection:</strong> 
-                Found ${
-                  this.currentPDF.header_patterns.length
-                } header pattern(s) and 
-                ${this.currentPDF.footer_patterns.length} footer pattern(s). 
-                ${
-                  this.skipHeaderFooter
-                    ? "Currently skipping them during reading."
-                    : "Currently including them during reading."
-                }
-            `;
+        <strong>Header/Footer Detection:</strong> 
+        Found ${this.currentPDF.header_patterns.length} header pattern(s) and 
+        ${this.currentPDF.footer_patterns.length} footer pattern(s). 
+        ${
+          this.skipHeaderFooter
+            ? "Currently skipping them during reading."
+            : "Currently including them during reading."
+        }
+      `;
       pdfPagesContainer.appendChild(infoDiv);
     }
 
-    this.currentPDF.pages.forEach((page) => {
+    this.currentPDF.pages.forEach((page, pageIndex) => {
+      console.log(
+        `Rendering page ${pageIndex}, image available: ${!!page.image}`
+      );
+
       const pageDiv = document.createElement("div");
       pageDiv.className = `page ${
         this.isImageView ? "image-view" : "text-view"
       }`;
+      pageDiv.dataset.pageIndex = pageIndex.toString();
 
       const pageHeader = document.createElement("h3");
       pageHeader.textContent = `Page ${page.page_number}`;
       pageDiv.appendChild(pageHeader);
 
       if (this.isImageView && page.image) {
+        console.log(`Creating image view for page ${pageIndex}`);
         // Render PDF page as image
         const img = document.createElement("img");
         img.src = `data:image/png;base64,${page.image}`;
@@ -238,7 +284,11 @@ class PDFReaderApp {
         img.style.maxWidth = "100%";
         img.style.height = "auto";
         pageDiv.appendChild(img);
+
+        // Add click handler for image view - but NOT as an overlay that interferes
+        this.addImageClickHandler(pageDiv, pageIndex);
       } else if (this.isImageView && !page.image) {
+        console.log(`No image available for page ${pageIndex}`);
         // Show message that image view is not available
         const messageDiv = document.createElement("div");
         messageDiv.style.textAlign = "center";
@@ -248,37 +298,76 @@ class PDFReaderApp {
           "<p>Image view not available. Switch to text view to see content.</p>";
         pageDiv.appendChild(messageDiv);
       } else {
+        console.log(`Creating text view for page ${pageIndex}`);
         // Render as interactive text
         const pageTextDiv = document.createElement("div");
         pageTextDiv.className = "page-text";
         pageTextDiv.id = `page-${page.page_number}`;
 
-        // Use processed text (without headers/footers) if skip is enabled
         const textToUse = this.skipHeaderFooter
           ? page.processed_text
           : page.original_text;
-        const wordsToUse = this.skipHeaderFooter
-          ? page.words
-          : this.extractWordsFromText(page.original_text);
+        const wordsToUse = this.currentWordsData[pageIndex] || [];
 
-        this.createWordElements(
-          page.page_number - 1,
-          textToUse,
-          wordsToUse,
-          pageTextDiv
+        console.log(
+          `Text view - words to use: ${wordsToUse.length}, text length: ${textToUse.length}`
         );
 
+        this.createWordElements(pageIndex, textToUse, wordsToUse, pageTextDiv);
         pageDiv.appendChild(pageTextDiv);
       }
 
       pdfPagesContainer.appendChild(pageDiv);
     });
+
+    console.log(
+      `Finished rendering PDF. Total word elements: ${this.wordElements.size}`
+    );
+  }
+
+  private addImageClickHandler(pageDiv: HTMLElement, pageIndex: number): void {
+    console.log(`Adding image click handler for page ${pageIndex}`);
+
+    // Create a button instead of an overlay to avoid conflicts
+    const switchButton = document.createElement("button");
+    switchButton.className = "btn btn-secondary switch-to-text-btn";
+    switchButton.textContent = "Click words to start reading";
+    switchButton.style.position = "absolute";
+    switchButton.style.top = "10px";
+    switchButton.style.right = "10px";
+    switchButton.style.zIndex = "100";
+
+    switchButton.addEventListener("click", (e) => {
+      console.log(`Switch to text button clicked for page ${pageIndex}`);
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Temporarily switch to text view for word selection
+      const originalView = this.isImageView;
+      this.isImageView = false;
+      this.renderPDF();
+
+      // Add a notice about the temporary switch
+      const notice = document.createElement("div");
+      notice.className = "temporary-notice";
+      notice.innerHTML =
+        "Click on any word below to start reading from that position, then switch back to image view if desired.";
+
+      const pagesContainer = document.getElementById("pdfPages");
+      if (pagesContainer && pagesContainer.firstChild) {
+        pagesContainer.insertBefore(notice, pagesContainer.firstChild);
+      }
+    });
+
+    pageDiv.style.position = "relative";
+    pageDiv.appendChild(switchButton);
   }
 
   private extractWordsFromText(text: string): WordData[] {
     const words: WordData[] = [];
     const wordPattern = /\b\w+\b/g;
     let match;
+
     while ((match = wordPattern.exec(text)) !== null) {
       words.push({
         word: match[0],
@@ -286,6 +375,10 @@ class PDFReaderApp {
         end_pos: match.index + match[0].length,
       });
     }
+
+    console.log(
+      `Extracted ${words.length} words from text of length ${text.length}`
+    );
     return words;
   }
 
@@ -295,7 +388,12 @@ class PDFReaderApp {
     words: WordData[],
     container: HTMLElement
   ): void {
+    console.log(
+      `Creating word elements for page ${pageIndex}, ${words.length} words`
+    );
+
     let lastIndex = 0;
+    let createdElements = 0;
 
     words.forEach((wordData, wordIndex) => {
       // Add any text before this word (spaces, punctuation, etc.)
@@ -308,25 +406,44 @@ class PDFReaderApp {
       const wordElement = document.createElement("span");
       wordElement.className = "word";
       wordElement.textContent = wordData.word;
+
+      // Create unique key for tracking
+      const wordKey = `${pageIndex}-${wordIndex}`;
       wordElement.dataset.pageIndex = pageIndex.toString();
       wordElement.dataset.wordIndex = wordIndex.toString();
-      wordElement.tabIndex = 0; // Make focusable for accessibility
+      wordElement.dataset.wordKey = wordKey;
+      wordElement.tabIndex = 0;
+
+      console.log(
+        `Creating word element: "${wordData.word}" with key: ${wordKey}`
+      );
 
       // Add click listener for jumping to word and auto-start
-      wordElement.addEventListener("click", () => {
+      const clickHandler = (e: Event) => {
+        console.log(
+          `Word clicked: "${wordData.word}" (page: ${pageIndex}, word: ${wordIndex})`
+        );
+        e.preventDefault();
+        e.stopPropagation();
         this.jumpToWordAndPlay(pageIndex, wordIndex);
-      });
+      };
+
+      wordElement.addEventListener("click", clickHandler);
+      console.log(`Added click listener to word: "${wordData.word}"`);
 
       // Add keyboard support for word elements
       wordElement.addEventListener("keydown", (event) => {
         if (event.code === "Enter" || event.code === "Space") {
+          console.log(`Keyboard activation on word: "${wordData.word}"`);
           event.preventDefault();
+          event.stopPropagation();
           this.jumpToWordAndPlay(pageIndex, wordIndex);
         }
       });
 
       container.appendChild(wordElement);
-      this.wordElements.push(wordElement);
+      this.wordElements.set(wordKey, wordElement);
+      createdElements++;
 
       lastIndex = wordData.end_pos;
     });
@@ -336,93 +453,124 @@ class PDFReaderApp {
       const remainingText = text.slice(lastIndex);
       container.appendChild(document.createTextNode(remainingText));
     }
+
+    console.log(
+      `Created ${createdElements} word elements for page ${pageIndex}. Total in map: ${this.wordElements.size}`
+    );
   }
 
   private jumpToWordAndPlay(pageIndex: number, wordIndex: number): void {
-    if (!this.isImageView && this.currentPDF) {
-      // Stop current playback
-      if (this.isPlaying) {
-        this.handleStop();
-      }
+    console.log(
+      `jumpToWordAndPlay called: page ${pageIndex}, word ${wordIndex}`
+    );
 
-      // Set new position
-      this.currentPageIndex = pageIndex;
-      this.currentWordIndex = wordIndex;
+    if (!this.currentPDF) {
+      console.log("No PDF loaded, cannot jump to word");
+      return;
+    }
 
-      // Clear previous highlighting and show clicked start position
-      this.clearHighlighting();
-      const clickedWordElement = this.findWordElement(pageIndex, wordIndex);
-      if (clickedWordElement) {
-        clickedWordElement.classList.add("clicked-start");
+    // Stop current playback
+    if (this.isPlaying) {
+      console.log("Stopping current playback");
+      this.handleStop();
+    }
 
-        // Scroll to clicked word
+    // Set new position
+    this.currentPageIndex = pageIndex;
+    this.currentWordIndex = wordIndex;
+
+    console.log(
+      `Set new position: page ${this.currentPageIndex}, word ${this.currentWordIndex}`
+    );
+
+    // Clear previous highlighting and show clicked start position
+    this.clearHighlighting();
+    const clickedWordElement = this.findWordElement(pageIndex, wordIndex);
+
+    if (clickedWordElement) {
+      console.log(`Found clicked word element, adding clicked-start class`);
+      clickedWordElement.classList.add("clicked-start");
+
+      // Scroll to clicked word only in text view
+      if (!this.isImageView) {
         clickedWordElement.scrollIntoView({
           behavior: "smooth",
           block: "center",
         });
       }
+    } else {
+      console.log(
+        `Could not find word element for page ${pageIndex}, word ${wordIndex}`
+      );
+    }
 
-      // Auto-start reading from this position
-      this.isPlaying = true;
-      this.isPaused = false;
-      this.startReading();
-      this.updateControlsState();
+    // Auto-start reading from this position
+    this.isPlaying = true;
+    this.isPaused = false;
+    this.startReading();
+    this.updateControlsState();
 
-      const currentPage = this.currentPDF.pages[pageIndex];
-      if (currentPage) {
-        const wordsToUse = this.skipHeaderFooter
-          ? currentPage.words
-          : this.extractWordsFromText(currentPage.original_text);
-        const targetWord = wordsToUse[wordIndex];
+    const wordsToUse = this.currentWordsData[pageIndex] || [];
+    const targetWord = wordsToUse[wordIndex];
 
-        if (targetWord) {
-          this.updateStatus(
-            `Started reading from page ${pageIndex + 1}, word: "${
-              targetWord.word
-            }"`
-          );
-        }
-      }
+    if (targetWord) {
+      console.log(`Starting to read from word: "${targetWord.word}"`);
+      this.updateStatus(
+        `Started reading from page ${pageIndex + 1}, word: "${targetWord.word}"`
+      );
+    } else {
+      console.log(
+        `Could not find target word at page ${pageIndex}, word ${wordIndex}`
+      );
     }
   }
 
   private handlePlay(): void {
-    if (!this.currentPDF) return;
+    console.log("Handle play called");
+
+    if (!this.currentPDF) {
+      console.log("No PDF loaded");
+      return;
+    }
 
     if (this.isPaused) {
+      console.log("Resuming from pause");
       this.speechSynthesis.resume();
       this.isPaused = false;
       this.updateControlsState();
       return;
     }
 
+    console.log("Starting fresh playback");
     this.isPlaying = true;
     this.startReading();
     this.updateControlsState();
   }
 
   private startReading(): void {
+    console.log(
+      `Starting reading at page ${this.currentPageIndex}, word ${this.currentWordIndex}`
+    );
+
     if (
       !this.currentPDF ||
       this.currentPageIndex >= this.currentPDF.pages.length
     ) {
+      console.log("Reached end of document or no PDF");
       this.handleStop();
       this.updateStatus("Finished reading the document.");
       return;
     }
 
-    const currentPage = this.currentPDF.pages[this.currentPageIndex];
-    if (!currentPage) {
-      this.handleStop();
-      return;
-    }
-
-    // Use processed or original text based on skip setting
-    const wordsToUse = this.skipHeaderFooter
-      ? currentPage.words
-      : this.extractWordsFromText(currentPage.original_text);
+    const wordsToUse = this.currentWordsData[this.currentPageIndex] || [];
+    console.log(
+      `Words available for page ${this.currentPageIndex}: ${wordsToUse.length}`
+    );
 
     if (this.currentWordIndex >= wordsToUse.length) {
+      console.log(
+        `Reached end of page ${this.currentPageIndex}, moving to next page`
+      );
       this.currentPageIndex++;
       this.currentWordIndex = 0;
       this.startReading();
@@ -431,20 +579,21 @@ class PDFReaderApp {
 
     const currentWord = wordsToUse[this.currentWordIndex];
     if (!currentWord) {
+      console.log(`No word found at index ${this.currentWordIndex}, skipping`);
       this.currentWordIndex++;
       this.startReading();
       return;
     }
 
-    // Highlight current word (only in text view)
-    if (!this.isImageView) {
-      this.highlightCurrentWord();
-    }
+    console.log(`Speaking word: "${currentWord.word}"`);
+
+    // Highlight current word
+    this.highlightCurrentWord();
 
     this.currentUtterance = new SpeechSynthesisUtterance(currentWord.word);
 
-    // Apply current speech rate (supports up to 5x speed)
-    this.currentUtterance.rate = Math.min(this.speechRate, 10); // Browser limit protection
+    // Apply current speech rate
+    this.currentUtterance.rate = Math.min(this.speechRate, 10);
     this.currentUtterance.pitch = 1.0;
     this.currentUtterance.volume = 1.0;
 
@@ -460,14 +609,13 @@ class PDFReaderApp {
     };
 
     this.currentUtterance.onend = () => {
+      console.log(`Finished speaking word: "${currentWord.word}"`);
       if (this.isPlaying && !this.isPaused) {
-        // Mark word as spoken (only in text view)
-        if (!this.isImageView) {
-          this.markWordAsSpoken();
-        }
+        // Mark word as spoken
+        this.markWordAsSpoken();
         this.currentWordIndex++;
 
-        // Much shorter delay calculation - scales inversely with speed
+        // Shorter delay calculation
         const delay = Math.max(2, Math.round(20 / this.speechRate));
 
         setTimeout(() => {
@@ -485,6 +633,10 @@ class PDFReaderApp {
   }
 
   private highlightCurrentWord(): void {
+    console.log(
+      `Highlighting word at page ${this.currentPageIndex}, index ${this.currentWordIndex}`
+    );
+
     // Clear previous current word highlighting but keep spoken words
     this.wordElements.forEach((element) => {
       element.classList.remove("current-word", "clicked-start");
@@ -496,13 +648,20 @@ class PDFReaderApp {
       this.currentWordIndex
     );
     if (wordElement) {
+      console.log(`Found word element, adding current-word class`);
       wordElement.classList.add("current-word");
 
-      // Scroll to current word smoothly
-      wordElement.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      // Scroll to current word smoothly only in text view
+      if (!this.isImageView) {
+        wordElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    } else {
+      console.log(
+        `Could not find word element for highlighting at page ${this.currentPageIndex}, word ${this.currentWordIndex}`
+      );
     }
   }
 
@@ -512,6 +671,7 @@ class PDFReaderApp {
       this.currentWordIndex
     );
     if (wordElement) {
+      console.log(`Marking word as spoken`);
       wordElement.classList.remove("current-word");
       wordElement.classList.add("spoken-word");
     }
@@ -521,22 +681,23 @@ class PDFReaderApp {
     pageIndex: number,
     wordIndex: number
   ): HTMLElement | null {
-    return (
-      this.wordElements.find(
-        (element) =>
-          element.dataset.pageIndex === pageIndex.toString() &&
-          element.dataset.wordIndex === wordIndex.toString()
-      ) || null
+    const wordKey = `${pageIndex}-${wordIndex}`;
+    const element = this.wordElements.get(wordKey);
+    console.log(
+      `Looking for word element with key: ${wordKey}, found: ${!!element}`
     );
+    return element || null;
   }
 
   private clearHighlighting(): void {
+    console.log(`Clearing highlighting for ${this.wordElements.size} elements`);
     this.wordElements.forEach((element) => {
       element.classList.remove("current-word", "spoken-word", "clicked-start");
     });
   }
 
   private handlePause(): void {
+    console.log("Handle pause called");
     if (this.speechSynthesis.speaking && !this.speechSynthesis.paused) {
       this.speechSynthesis.pause();
       this.isPaused = true;
@@ -548,6 +709,7 @@ class PDFReaderApp {
   }
 
   private handleStop(): void {
+    console.log("Handle stop called");
     this.speechSynthesis.cancel();
     this.isPlaying = false;
     this.isPaused = false;
@@ -559,6 +721,8 @@ class PDFReaderApp {
   private handleSpeedChange(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.speechRate = parseFloat(target.value);
+
+    console.log(`Speed changed to: ${this.speechRate}`);
 
     const speedValue = document.getElementById("speedValue");
     if (speedValue) {
@@ -575,6 +739,7 @@ class PDFReaderApp {
   }
 
   private enableControls(): void {
+    console.log("Enabling controls");
     const playBtn = document.getElementById("playBtn") as HTMLButtonElement;
     const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
     const stopBtn = document.getElementById("stopBtn") as HTMLButtonElement;
@@ -620,6 +785,7 @@ class PDFReaderApp {
     if (statusText) {
       statusText.textContent = message;
     }
+    console.log("Status update:", message);
   }
 }
 

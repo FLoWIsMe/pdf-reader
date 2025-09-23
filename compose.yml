@@ -1,5 +1,6 @@
 services:
   frontend:
+    container_name: frontend
     build: ./frontend
     ports:
       - "3000:3000"
@@ -12,6 +13,7 @@ services:
       - backend
 
   backend:
+    container_name: backend
     build: ./backend
     ports:
       - "8000:8000"
